@@ -1,0 +1,2 @@
+show ver | include IOS
+
