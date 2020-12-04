@@ -1,0 +1,79 @@
+#!/usr/bin/expect
+
+# increase expect buffer
+match_max 100000
+
+# increase expect timeout
+set timeout 10
+
+# get target ip address from command line
+set ip [lindex $argv 0]
+
+# set login credentials for initial router config if -i switch present, else get from command line variables  
+if {[lsearch $argv "-i"] != -1} {
+    set login_id "ssh_user"
+    set first_password "<secret>"
+} else {
+    set login_id [lindex $argv 1]
+    set first_password [lindex $argv 2]
+}
+
+# get pid from command line
+set script_pid [lindex $argv [expr {[lsearch $argv "-pid"] +1} ]]
+
+# get command file filename
+if {[lsearch $argv "-f"] != -1} {
+    set filename [lindex $argv [expr {[lsearch $argv "-f"] +1} ]]
+    set run_commands 1 	
+} else {
+    set run_commands 0
+}     
+
+# initial variables
+set login_ok 0
+set results ""
+set prompt "(>$)|(#$)|(> $)"
+
+# open results file with pid in filename
+set rf [open "results.$ip.$script_pid.out" w]
+   
+# attempt ssh to target    
+set ssh_pid [spawn -noecho ssh -l $login_id $ip]
+expect {
+    "password:" {
+        send "$first_password\r"
+        expect {
+            -re $prompt {
+                # login successful
+                puts "Connected OK to $ip with ssh\n"
+                set login_ok 1
+            }
+        }
+    }
+    default {
+        # login failed
+        puts "failed - to connect to $ip with ssh.  Killing ssh pid $ssh_pid\n"
+        exec kill $ssh_pid
+    }
+}       
+
+if {$login_ok == 1} {
+    if {$run_commands == 1} {
+        # run commands
+        set file_pointer [open $filename r]
+        set file_data [read $file_pointer]
+        close $file_pointer
+        set commands [split $file_data "\n"]
+        foreach line $commands {
+            send "$line\r"
+            expect -re "$prompt"
+            append results $expect_out(buffer)
+        }
+        send "\r"
+        expect -re "$prompt"
+        append results $expect_out(buffer)
+    }
+}     
+puts $rf $results
+close $rf
+

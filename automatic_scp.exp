@@ -1,0 +1,37 @@
+#!/usr/bin/expect
+
+#increase expect buffer
+match_max 100000
+
+#set scp username and password for config file transfer to router on initial configuration
+set scp_username scp_user
+set scp_password <secret>
+
+#get router IP address, configuration filenames and pid from command line
+set ip [lindex $argv 0]
+set source_file_name [lindex $argv 1]
+set destination_file_name [lindex $argv 2]
+set script_pid [lindex $argv [expr {[lsearch $argv "-pid"] +1} ]]
+
+#define the results file and open
+set results_file [open "results.$ip.$script_pid.out" w]
+
+set results ""
+#flush LINUX server’s encryption key database for router’s IP address in case is old entry
+spawn ssh-keygen -R $ip
+
+# attempt the scp transfer and interact with router depending on the responses
+spawn scp $source_file_name $scp_username@$ip:$destination_file_name
+
+expect  {
+    "password:" {
+        send "$scp_password\r"
+        expect "closed"                         
+    }
+}
+
+# save results
+append results $expect_out(buffer)
+puts $results_file $results
+close $results_file
+
